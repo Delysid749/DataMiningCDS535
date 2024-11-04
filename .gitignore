@@ -1,0 +1,67 @@
+# Ignore macOS system files
+.DS_Store
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Ignore virtual environments
+venv/
+env/
+
+# Ignore log and temporary files
+*.log
+*.tmp
+*.swp
+*.bak
+*.backup
+
+# Ignore IDE-specific files (e.g., PyCharm, VSCode)
+.idea/
+.vscode/
+*.code-workspace
+
+# Ignore data and output files in the 'data2017' directory
+data2017/*
+
+# Ignore specific output directories
+output/
+reports/
+
+# Ignore OS-specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Ignore archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.tar.bz2
+
+# Ignore common document formats that are not necessary for version control
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+
+# Ignore temporary files created by text editors
+*~
+*.sublime-workspace
+*.sublime-project
+
+# Custom ignores for this project
+../../report/
+../../data/
