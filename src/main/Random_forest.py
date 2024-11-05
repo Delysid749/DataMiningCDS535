@@ -8,6 +8,7 @@ from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import psutil
+import os
 
 # 内存使用监控
 def print_memory_usage(stage=""):
@@ -105,6 +106,12 @@ def main(train_file, test_file):
 
     y_test_pred_encoded = model.predict(X_test)
     y_test_pred = [list(label_encoder_mapping.keys())[list(label_encoder_mapping.values()).index(pred)] for pred in y_test_pred_encoded]
+
+    file_path = '../../report/rf/prediction_results.csv'
+    directory = os.path.dirname(file_path)
+    # 检查并创建目录
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     result_df = pd.DataFrame({'id': test_ids, 'happiness': y_test_pred})
     result_df.to_csv('../../report/rf/prediction_results.csv', index=False)
