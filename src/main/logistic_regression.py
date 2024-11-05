@@ -13,34 +13,56 @@ from threading import Thread
 
 # 内存使用监控
 def print_memory_usage(stage=""):
+    """
+    打印当前 Python 进程的内存使用情况。
+
+    参数:
+    stage (str): 当前代码运行阶段的标识，用于在输出中标记内存使用的时刻。
+    """
     process = psutil.Process()
-    mem = process.memory_info().rss / 1024 ** 2
+    mem = process.memory_info().rss / 1024 ** 2  # 将字节转换为 MB
     print(f"{stage} - 当前内存使用: {mem:.2f} MB")
 
 
 # 数据预处理函数
 def data_preprocessing(input_file, is_train=True, categorical_columns=None, numerical_columns=None, output_list=None):
+    """
+    读取数据并进行预处理，包括缺失值处理、类别编码和数值处理。
+
+    参数:
+    input_file (str): 数据文件的路径。
+    is_train (bool): 标记是否为训练数据集。
+    categorical_columns (list): 包含分类特征列名的列表。
+    numerical_columns (list): 包含数值特征列名的列表。
+    output_list (list): 用于存储处理后的数据的列表（用于多线程）。
+
+    返回:
+    pd.DataFrame: 预处理后的数据集。
+    """
     start_time = time.time()
     print(f"{'训练' if is_train else '测试'}数据预处理开始...")
 
+    # 指定分类列的数据类型为 'category' 以节省内存
     dtype_spec = {column: 'category' for column in categorical_columns}
     data = pd.read_csv(input_file, dtype=dtype_spec)
 
-    # 将特殊值视为缺失值
+    # 将特殊值替换为缺失值
     special_values = [-1, -2, -3, -8]
     data.replace(special_values, np.nan, inplace=True)
 
-    # 如果是训练集且包含目标变量，移除目标变量缺失的行
+    # 如果是训练集且包含目标变量 'happiness'，移除目标变量缺失的行
     if is_train and 'happiness' in data.columns:
         data = data.dropna(subset=['happiness'])
 
     # 填充缺失值和数据类型转换
     for column in data.columns:
         if column in categorical_columns and column in data.columns:
+            # 填充分类特征的缺失值为该列的众数，并将其编码为数值
             mode_value = data[column].mode()[0]
             data[column] = data[column].fillna(mode_value)
             data[column] = data[column].astype('category').cat.codes
         elif column in numerical_columns and column in data.columns:
+            # 确保数值特征的数据类型为数值并填充缺失值为中位数
             data[column] = pd.to_numeric(data[column], errors='coerce')
             data[column] = data[column].fillna(data[column].median())
 
@@ -51,25 +73,51 @@ def data_preprocessing(input_file, is_train=True, categorical_columns=None, nume
 
 # 数据平衡函数
 def balance_data(X, y):
+    """
+    使用 SMOTE 平衡数据集的类别分布。
+
+    参数:
+    X (pd.DataFrame): 特征数据集。
+    y (pd.Series): 目标变量。
+
+    返回:
+    tuple: 平衡后的特征数据 (X_resampled) 和目标变量 (y_resampled)。
+    """
+    start_time = time.time()
     print("使用 SMOTE 平衡数据...")
     smote = SMOTE(random_state=42)
     X_resampled, y_resampled = smote.fit_resample(X, y)
     print("数据平衡后类别分布:\n", pd.Series(y_resampled).value_counts())
+    print(f"数据平衡完成 - 耗时: {time.time() - start_time:.2f} 秒")
     return X_resampled, y_resampled
 
 
 # 模型训练函数
 def train_logistic_regression_model(X_train, y_train, X_val, y_val):
+    """
+    使用 Logistic 回归模型进行训练并在验证集上进行评估。
+
+    参数:
+    X_train (pd.DataFrame): 训练集特征数据。
+    y_train (pd.Series): 训练集目标变量。
+    X_val (pd.DataFrame): 验证集特征数据。
+    y_val (pd.Series): 验证集目标变量。
+
+    返回:
+    tuple: 训练好的模型和验证集预测结果。
+    """
     start_time = time.time()
     print("开始训练 Logistic 回归模型...")
 
-    # 增加 class_weight='balanced'
+    # 初始化并训练 Logistic 回归模型，设置 class_weight='balanced' 以应对类别不平衡
     model = LogisticRegression(max_iter=2000, solver='lbfgs', multi_class='multinomial', random_state=42,
                                class_weight='balanced')
     model.fit(X_train, y_train)
 
+    # 在验证集上进行预测
     y_val_pred = model.predict(X_val)
 
+    # 输出分类报告
     print("验证集分类报告:\n", classification_report(y_val, y_val_pred, zero_division=1))
     print(f"模型训练和验证完成 - 耗时: {time.time() - start_time:.2f} 秒")
 
@@ -78,15 +126,29 @@ def train_logistic_regression_model(X_train, y_train, X_val, y_val):
 
 # 检查和创建文件夹
 def ensure_directory_exists(directory_path):
+    """
+    检查文件夹是否存在，如果不存在则创建。
+
+    参数:
+    directory_path (str): 目标文件夹路径。
+    """
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
 
 # 主函数
 def main(train_file, test_file):
+    """
+    主函数执行数据预处理、数据平衡、模型训练、验证和测试集预测，并导出结果。
+
+    参数:
+    train_file (str): 训练数据文件路径。
+    test_file (str): 测试数据文件路径。
+    """
     start_time_main = time.time()
     print_memory_usage("主函数开始")
 
+    # 指定分类和数值特征列
     categorical_columns = [
         'survey_type', 'province', 'gender', 'nationality', 'religion', 'religion_freq',
         'edu', 'political', 'health', 'health_problem', 'depression', 'hukou',
@@ -96,7 +158,7 @@ def main(train_file, test_file):
 
     numerical_columns = ['id', 'income', 'family_income']
 
-    # 使用多线程预处理数据
+    # 使用多线程进行数据预处理
     train_data = []
     test_data = []
     threads = [
@@ -104,37 +166,44 @@ def main(train_file, test_file):
         Thread(target=data_preprocessing, args=(test_file, False, categorical_columns, numerical_columns, test_data))
     ]
 
+    # 启动并等待所有线程完成
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
 
+    # 获取预处理后的数据
     train_data = train_data[0]
     test_data = test_data[0]
 
     # 划分训练集和验证集
+    split_start_time = time.time()
     X = train_data.drop(['happiness', 'id'], axis=1, errors='ignore')
     y = train_data['happiness']
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    print(f"数据集划分完成 - 耗时: {time.time() - split_start_time:.2f} 秒")
 
     # 数据标准化
+    scaler_start_time = time.time()
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_val = scaler.transform(X_val)
     X_test = scaler.transform(test_data.drop(columns=['id'], errors='ignore'))
+    print(f"数据标准化完成 - 耗时: {time.time() - scaler_start_time:.2f} 秒")
 
     # 平衡训练数据
     X_train_resampled, y_train_resampled = balance_data(X_train, y_train)
 
     # 训练模型
-    print("训练 Logistic 回归模型...")
     model, y_val_pred = train_logistic_regression_model(X_train_resampled, y_train_resampled, X_val, y_val)
 
     # 测试集预测
+    test_predict_start_time = time.time()
     test_ids = test_data['id']
     y_test_pred = model.predict(X_test)
+    print(f"测试集预测完成 - 耗时: {time.time() - test_predict_start_time:.2f} 秒")
 
-    # 检查并创建导出文件夹
+    # 检查并创建输出文件夹
     output_dir = '../../report/logistic_regression/'
     ensure_directory_exists(output_dir)
 
