@@ -65,6 +65,11 @@ def data_preprocessing(input_file, is_train=True, categorical_columns=None, nume
             data[column] = pd.to_numeric(data[column], errors='coerce')
             data[column] = data[column].fillna(data[column].median())
 
+    # 生成预处理后的数据集文件
+    processed_file_path = f"../../report/xg/processed_{'train' if is_train else 'test'}.csv"
+    data.to_csv(processed_file_path, index=False)
+    print(f"预处理后的数据已保存到 {processed_file_path}")
+
     end_time = time.time()  # 结束计时
     print(f"数据预处理耗时: {end_time - start_time:.2f} 秒")
     return data
