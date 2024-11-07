@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 
 def data_preprocessing(data, is_train=True, categorical_columns=None, numerical_columns=None, one_hot_columns=None):
+    # 检查 data 是否为 DataFrame
+    if not isinstance(data, pd.DataFrame):
+        raise ValueError("输入的数据必须是 pandas DataFrame。")
     dataset_type = "训练集" if is_train else "测试集"
     start_time = time.time()
     print(f"\n=== 开始 {dataset_type} 数据预处理 ===")
