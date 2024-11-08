@@ -6,30 +6,23 @@ from sklearn.model_selection import train_test_split, cross_val_score, Stratifie
 from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.data_process.pre_process import data_preprocessing
 from src.data_process.balance import balance_data
 from src.config.feature_columns import FeatureColumns
-
 
 warnings.filterwarnings("ignore", category=UserWarning, module="xgboost")
 
 TRAIN_FILE = '../../data/happiness_train.csv'
 TEST_FILE = '../../data/happiness_test.csv'
 OUTPUT_FILE = '../../report/xg/prediction_results.csv'
-LOW_CORRELATION_FEATURES = ['survey_type', 'religion', 'work_status', 'work_type', 'work_manage']
 
 # 确保目录存在
 def ensure_directory_exists(file_path):
-    """确保目录存在，如果不存在则创建。"""
     directory = os.path.dirname(file_path)
     if not os.path.exists(directory):
         os.makedirs(directory)
-
-
-from sklearn.preprocessing import LabelEncoder
-
 
 # 交叉验证评分函数
 def cross_validate_model(X, y, message=""):
@@ -39,14 +32,12 @@ def cross_validate_model(X, y, message=""):
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    model = XGBClassifier(objective='multi:softmax', num_class=len(label_encoder.classes_), random_state=42,
-                          use_label_encoder=False)
+    model = XGBClassifier(objective='multi:softmax', num_class=len(label_encoder.classes_), random_state=42)
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     scores = cross_val_score(model, X, y_encoded, cv=skf, scoring='accuracy')
     print(f"{message} 交叉验证结束 - 平均准确率: {scores.mean():.4f}\n")
     return scores.mean()
-
 
 # 模型训练函数
 def train_xgboost_model(X_train, y_train, X_val, y_val):
@@ -79,6 +70,7 @@ def main(train_file, test_file):
     categorical_columns = FeatureColumns.CATEGORICAL_COLUMNS.value
     numerical_columns = FeatureColumns.NUMERICAL_COLUMNS.value
     one_hot_columns = FeatureColumns.ONE_HOT_COLUMNS.value
+    low_correlation_features = FeatureColumns.LOW_CORRELATION_FEATURES.value
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         train_data_raw = pd.read_csv(train_file)
@@ -93,21 +85,23 @@ def main(train_file, test_file):
     # 数据平衡
     X_resampled, y_resampled = balance_data(train_data, model_type='tree')
 
-    # 交叉验证 - 保留所有特征
-    start_time = time.time()
-    score_all_features = cross_validate_model(X_resampled, y_resampled, message="保留所有特征")
-    print(f"保留所有特征交叉验证耗时: {time.time() - start_time:.2f} 秒\n")
+    # 并行交叉验证
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {
+            executor.submit(cross_validate_model, X_resampled, y_resampled, "保留所有特征"): "all_features",
+            executor.submit(cross_validate_model, X_resampled.drop(columns=low_correlation_features, errors='ignore'), y_resampled, "删除低相关性特征"): "reduced_features"
+        }
 
-    # 交叉验证 - 删除低相关性特征
-    start_time = time.time()
-    X_reduced = X_resampled.drop(columns=LOW_CORRELATION_FEATURES, errors='ignore')
-    score_reduced_features = cross_validate_model(X_reduced, y_resampled, message="删除低相关性特征")
-    print(f"删除低相关性特征交叉验证耗时: {time.time() - start_time:.2f} 秒\n")
+        # 获取交叉验证结果
+        results = {}
+        for future in as_completed(futures):
+            label = futures[future]
+            results[label] = future.result()
 
     # 决定最终特征集
-    if score_reduced_features >= score_all_features:
+    if results["reduced_features"] >= results["all_features"]:
         print("删除低相关性特征不会降低模型准确率，选择删除低相关性特征进行训练")
-        X_final = X_reduced
+        X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
     else:
         print("删除低相关性特征降低了模型准确率，选择保留所有特征进行训练")
         X_final = X_resampled
