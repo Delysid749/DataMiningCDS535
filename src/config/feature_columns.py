@@ -1,4 +1,3 @@
-# src/config/feature_columns.py
 
 from enum import Enum
 

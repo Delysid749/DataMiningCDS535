@@ -38,7 +38,7 @@ data2017/*
 # Ignore specific output directories
 output/
 report/
-
+src/logs/
 # Ignore OS-specific files
 Thumbs.db
 ehthumbs.db
