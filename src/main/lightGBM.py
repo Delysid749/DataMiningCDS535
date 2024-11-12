@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import time
 from concurrent.futures import ThreadPoolExecutor
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from sklearn.preprocessing import LabelEncoder
 from lightgbm import LGBMClassifier
@@ -32,32 +32,14 @@ log_file_path = os.path.join(LOG_DIR, 'execution_log.txt')
 
 def log_output(message, log_only_important=False):
     """将信息输出到控制台，并根据需要选择性写入日志文件"""
-    # 总是打印到控制台
-    print(message)
-
-    # 根据条件写入日志文件
+    print(message)  # 总是打印到控制台
     if log_only_important:
         with open(log_file_path, 'a') as log_file:
             log_file.write(f"{message}\n")
 
 
-def cross_validate_model(X, y, message=""):
-    """使用 cross_val_score 并行执行交叉验证"""
-    log_output(f"=== {message} 开始交叉验证 ===")
-    model = LGBMClassifier(objective='multiclass', random_state=42, verbose=-1, n_jobs=-1)
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-    # 使用 cross_val_score 并行化处理
-    scores = cross_val_score(model, X, y, cv=skf, scoring='accuracy', n_jobs=-1)
-    mean_score = scores.mean()
-
-    log_output(f"{message} 交叉验证结束 - 平均准确率: {mean_score:.4f}\n")
-    return mean_score
-
-
 # 主流程函数
 def main(train_file, test_file):
-    # 记录执行代码的当地时间
     local_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     log_output(f"=== 本次执行时间: {local_time} ===", log_only_important=True)
 
@@ -82,29 +64,8 @@ def main(train_file, test_file):
     # 数据平衡
     X_resampled, y_resampled = balance_data(train_data, model_type='tree')
 
-    # 顺序执行两个交叉验证任务并记录各自的执行时间
-    all_features_start_time = time.time()
-    all_features_score = cross_validate_model(X_resampled, y_resampled, "保留所有特征")
-    all_features_duration = time.time() - all_features_start_time
-    log_output(f"保留所有特征交叉验证耗时: {all_features_duration:.2f} 秒")
-
-    reduced_features_start_time = time.time()
-    reduced_features_score = cross_validate_model(X_resampled.drop(columns=low_correlation_features, errors='ignore'),
-                                                  y_resampled, "删除低相关性特征")
-    reduced_features_duration = time.time() - reduced_features_start_time
-    log_output(f"删除低相关性特征交叉验证耗时: {reduced_features_duration:.2f} 秒")
-
-    # 总交叉验证时间
-    cv_duration = all_features_duration + reduced_features_duration
-    log_output(f"总交叉验证耗时: {cv_duration:.2f} 秒")
-
-    # 记录交叉验证结果到日志文件
-    if reduced_features_score >= all_features_score:
-        log_output("删除低相关性特征不会降低模型准确率，选择删除低相关性特征进行训练", log_only_important=True)
-        X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
-    else:
-        log_output("删除低相关性特征降低了模型准确率，选择保留所有特征进行训练", log_only_important=True)
-        X_final = X_resampled
+    # 删除低相关性特征
+    X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
     final_features = X_final.columns
 
     # 划分训练集和验证集

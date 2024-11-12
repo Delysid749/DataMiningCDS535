@@ -1,9 +1,9 @@
 import os
 import pandas as pd
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.metrics import classification_report, accuracy_score
+from concurrent.futures import ThreadPoolExecutor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder
 from src.data_process.pre_process import data_preprocessing
@@ -30,43 +30,6 @@ def log_output(message, log_only_important=False):
     if log_only_important:
         with open(log_file_path, 'a') as log_file:
             log_file.write(f"{message}\n")
-
-def cross_validate_model(X, y, message=""):
-    """执行交叉验证并对每一折并行计算，输出平均准确率"""
-    log_output(f"=== {message} 开始交叉验证 ===")
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y)
-
-    model_params = {
-        'objective': 'multi:softmax',
-        'num_class': len(label_encoder.classes_),
-        'random_state': 42,
-        'eval_metric': 'mlogloss',
-        'n_jobs': 1  # 每折单独并行，因此每个模型内部使用单进程
-    }
-
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = []
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [
-            executor.submit(train_and_score, X.iloc[train_index], X.iloc[val_index], y_encoded[train_index], y_encoded[val_index], model_params)
-            for train_index, val_index in skf.split(X, y_encoded)
-        ]
-
-        for future in as_completed(futures):
-            scores.append(future.result())
-
-    mean_score = sum(scores) / len(scores)
-    log_output(f"{message} 交叉验证结束 - 平均准确率: {mean_score:.4f}\n")
-    return mean_score
-
-def train_and_score(X_train, X_val, y_train, y_val, model_params):
-    """训练 XGBoost 模型并返回单折的验证准确率"""
-    model = XGBClassifier(**model_params)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_val)
-    return accuracy_score(y_val, y_pred)
 
 def train_xgboost_model(X_train, y_train, X_val, y_val):
     start_time = time.time()
@@ -107,37 +70,25 @@ def main(train_file, test_file):
 
     X_resampled, y_resampled = balance_data(train_data, model_type='tree')
 
-    all_features_start_time = time.time()
-    all_features_score = cross_validate_model(X_resampled, y_resampled, "保留所有特征")
-    all_features_duration = time.time() - all_features_start_time
-    log_output(f"保留所有特征交叉验证耗时: {all_features_duration:.2f} 秒")
-
-    reduced_features_start_time = time.time()
-    reduced_features_score = cross_validate_model(X_resampled.drop(columns=low_correlation_features, errors='ignore'), y_resampled, "删除低相关性特征")
-    reduced_features_duration = time.time() - reduced_features_start_time
-    log_output(f"删除低相关性特征交叉验证耗时: {reduced_features_duration:.2f} 秒")
-
-    cv_duration = all_features_duration + reduced_features_duration
-    log_output(f"总交叉验证耗时: {cv_duration:.2f} 秒")
-
-    if reduced_features_score >= all_features_score:
-        log_output("删除低相关性特征不会降低模型准确率，选择删除低相关性特征进行训练", log_only_important=True)
-        X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
-    else:
-        log_output("删除低相关性特征降低了模型准确率，选择保留所有特征进行训练", log_only_important=True)
-        X_final = X_resampled
+    # 删除低相关性特征
+    log_output(f"删除低相关性特征: {low_correlation_features}")
+    X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
     final_features = X_final.columns
 
+    # 划分训练集和验证集
     X_train, X_val, y_train, y_val = train_test_split(X_final, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
 
+    # 模型训练和验证
     model, y_val_pred, label_encoder_mapping = train_xgboost_model(X_train, y_train, X_val, y_val)
 
+    # 测试集预测
     test_ids = test_data['id']
     X_test = test_data.drop(columns=['id'], errors='ignore')
     X_test = X_test.reindex(columns=final_features, fill_value=0)
     y_test_pred_encoded = model.predict(X_test)
     y_test_pred = [list(label_encoder_mapping.keys())[list(label_encoder_mapping.values()).index(pred)] for pred in y_test_pred_encoded]
 
+    # 保存预测结果
     result_df = pd.DataFrame({'id': test_ids, 'happiness': y_test_pred})
     result_df.to_csv(OUTPUT_FILE, index=False)
     log_output(f"预测结果已导出到 {OUTPUT_FILE}")

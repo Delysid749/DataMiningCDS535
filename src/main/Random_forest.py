@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import time
 from concurrent.futures import ThreadPoolExecutor
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -35,24 +35,6 @@ def log_output(message, log_only_important=False):
     if log_only_important:
         with open(log_file_path, 'a') as log_file:
             log_file.write(f"{message}\n")
-
-
-def cross_validate_model(X, y, message=""):
-    """执行交叉验证并输出平均准确率"""
-    log_output(f"=== {message} 开始交叉验证 ===")
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y)
-
-    # 优化模型参数
-    model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)  # 优化参数
-
-    # 使用 StratifiedKFold 进行交叉验证
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = cross_val_score(model, X, y_encoded, cv=skf, scoring='accuracy', n_jobs=-1)  # 并行交叉验证
-
-    mean_score = scores.mean()
-    log_output(f"{message} 交叉验证结束 - 平均准确率: {mean_score:.4f}\n")
-    return mean_score
 
 
 def train_random_forest_model(X_train, y_train, X_val, y_val):
@@ -93,34 +75,21 @@ def main(train_file, test_file):
         train_data = train_future.result()
         test_data = test_future.result()
 
+    # 数据平衡处理
     X_resampled, y_resampled = balance_data(train_data, model_type='tree')
 
-    all_features_start_time = time.time()
-    all_features_score = cross_validate_model(X_resampled, y_resampled, "保留所有特征")
-    all_features_duration = time.time() - all_features_start_time
-    log_output(f"保留所有特征交叉验证耗时: {all_features_duration:.2f} 秒")
-
-    reduced_features_start_time = time.time()
-    reduced_features_score = cross_validate_model(X_resampled.drop(columns=low_correlation_features, errors='ignore'),
-                                                  y_resampled, "删除低相关性特征")
-    reduced_features_duration = time.time() - reduced_features_start_time
-    log_output(f"删除低相关性特征交叉验证耗时: {reduced_features_duration:.2f} 秒")
-
-    cv_duration = all_features_duration + reduced_features_duration
-    log_output(f"总交叉验证耗时: {cv_duration:.2f} 秒")
-
-    if reduced_features_score >= all_features_score:
-        log_output("删除低相关性特征不会降低模型准确率，选择删除低相关性特征进行训练", log_only_important=True)
-        X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
-    else:
-        log_output("删除低相关性特征降低了模型准确率，选择保留所有特征进行训练", log_only_important=True)
-        X_final = X_resampled
+    # 删除低相关性特征
+    log_output(f"删除低相关性特征: {low_correlation_features}")
+    X_final = X_resampled.drop(columns=low_correlation_features, errors='ignore')
     final_features = X_final.columns
 
+    # 划分训练集和验证集
     X_train, X_val, y_train, y_val = train_test_split(X_final, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
 
+    # 模型训练和验证
     model, y_val_pred, label_encoder_mapping = train_random_forest_model(X_train, y_train, X_val, y_val)
 
+    # 测试集预测
     test_ids = test_data['id']
     X_test = test_data.drop(columns=['id'], errors='ignore')
     X_test = X_test.reindex(columns=final_features, fill_value=0)
@@ -128,6 +97,7 @@ def main(train_file, test_file):
     y_test_pred = [list(label_encoder_mapping.keys())[list(label_encoder_mapping.values()).index(pred)] for pred in
                    y_test_pred_encoded]
 
+    # 保存预测结果
     result_df = pd.DataFrame({'id': test_ids, 'happiness': y_test_pred})
     result_df.to_csv(OUTPUT_FILE, index=False)
     log_output(f"预测结果已导出到 {OUTPUT_FILE}")
