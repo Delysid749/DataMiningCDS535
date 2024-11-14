@@ -3,9 +3,10 @@ import os
 import optuna
 import pandas as pd
 import time
+from sklearn.model_selection import cross_val_score
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score,classification_report
+from sklearn.metrics import accuracy_score, classification_report
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from src.data_process.pre_process import data_preprocessing
@@ -46,11 +47,11 @@ def objective(trial, X_train, y_train, X_val, y_val):
            验证集上的F1分数。
        """
     # 定义超参数搜索空间
-    n_estimators = trial.suggest_int('n_estimators', 100, 300)
-    max_depth = trial.suggest_int("max_depth", 10, 20)
-    min_samples_split = trial.suggest_int("min_samples_split", 2, 5)
+    n_estimators = trial.suggest_int('n_estimators', 100, 400)
+    max_depth = trial.suggest_int("max_depth", 15, 20)
+    min_samples_split = trial.suggest_int("min_samples_split", 2, 6)
     min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 3)
-    max_features = trial.suggest_float("max_features", 0.3, 0.8)
+    max_features = trial.suggest_float("max_features", 0.5, 0.8)
     criterion = trial.suggest_categorical("criterion", ["gini", "entropy"])
     bootstrap = trial.suggest_categorical("bootstrap", [True, False])
     oob_score = trial.suggest_categorical("oob_score", [True, False]) if bootstrap else False
@@ -73,15 +74,18 @@ def objective(trial, X_train, y_train, X_val, y_val):
     # 编码目标标签
     label_encoder = LabelEncoder()
     y_train_edcoded = label_encoder.fit_transform(y_train)
-    y_val_encoded = label_encoder.fit_transform(y_val)
 
-    rf_model.fit(X_train, y_train_edcoded)
+    scores = cross_val_score(rf_model, X_train, y_train_edcoded, cv=5, scoring='accuracy', n_jobs=-1)
+    return scores.mean()
 
-    # 验证集预测并计算F1分数
-    y_val_pred_encoded = rf_model.predict(X_val)
-    accuracy = accuracy_score(y_val_encoded,y_val_pred_encoded)
-
-    return accuracy
+    # y_val_encoded = label_encoder.fit_transform(y_val)
+    #
+    # rf_model.fit(X_train, y_train_edcoded)
+    #
+    # y_val_pred_encoded = rf_model.predict(X_val)
+    # accuracy = accuracy_score(y_val_encoded,y_val_pred_encoded)
+    #
+    # return accuracy
 
 
 def train_random_forest_model_with_optuna(X_train, y_train, X_val, y_val):
@@ -109,7 +113,7 @@ def train_random_forest_model_with_optuna(X_train, y_train, X_val, y_val):
 
     # 使用Optuna进行超参数优化
     study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner())
-    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=10)
+    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=15)
 
     # 获取最佳超参数并重新训练模型
     best_params = study.best_params

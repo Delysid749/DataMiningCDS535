@@ -3,6 +3,7 @@ import optuna
 import pandas as pd
 import time
 from sklearn.metrics import f1_score
+from sklearn.model_selection import cross_val_score
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
@@ -66,12 +67,15 @@ def objective(trial, X_train, y_train, X_val, y_val):
 
     # 使用当前超参数训练模型
     xgb_model = XGBClassifier(**params)
-    xgb_model.fit(X_train, y_train_encoded)
+
+    scores = cross_val_score(xgb_model, X_train, y_train_encoded, cv=5, scoring='accuracy', n_jobs=-1)
+    return scores.mean()
+    # xgb_model.fit(X_train, y_train_encoded)
 
     # 验证集预测并计算准确率
-    y_val_pred_encoded = xgb_model.predict(X_val)
-    accuracy = (y_val_pred_encoded == y_val_encoded).mean()
-    return accuracy
+    # y_val_pred_encoded = xgb_model.predict(X_val)
+    # accuracy = (y_val_pred_encoded == y_val_encoded).mean()
+    # return accuracy
 
 
 def train_xgboost_model(X_train, y_train, X_val, y_val):
@@ -100,7 +104,7 @@ def train_xgboost_model(X_train, y_train, X_val, y_val):
 
     # 使用Optuna进行超参数优化
     study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner())
-    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=10)
+    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=15)
 
     log_output(f"最佳参数: {study.best_params}", log_file_path, log_only_important=True)
 

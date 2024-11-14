@@ -12,7 +12,7 @@ from src.data_process.balance import balance_data
 from src.config.feature_columns import FeatureColumns
 from src.common.directory_exists import ensure_directory_exists
 from src.common.log_output import log_output
-
+from sklearn.model_selection import cross_val_score
 # 文件路径配置
 TRAIN_FILE = '../../data/happiness_train.csv'
 TEST_FILE = '../../data/happiness_test.csv'
@@ -43,10 +43,14 @@ def objective(trial, X_train, y_train, X_val, y_val):
     }
 
     model = LGBMClassifier(**param)
-    model.fit(X_train, y_train)
-    y_val_pred = model.predict(X_val)
-    score = f1_score(y_val, y_val_pred, average='weighted')
-    return score
+    scores = cross_val_score(model, X_train, y_train, cv=5, scoring="accuracy", n_jobs=-1)
+    return scores.mean()  # 返回交叉验证的平均准确率
+
+
+    # model.fit(X_train, y_train)
+    # y_val_pred = model.predict(X_val)
+    # score = f1_score(y_val, y_val_pred, average='weighted')
+    # return score
 
 
 # 超参数自动调优函数
@@ -93,14 +97,14 @@ def main(train_file, test_file):
     label_encoder = LabelEncoder()
     y_train_encoded = label_encoder.fit_transform(y_train)
     y_val_encoded = label_encoder.transform(y_val)
-
+    start_time = time.time()
     # 进行超参数优化
     log_output("\n=== 开始超参数自动调优 ===", log_file_path)
     best_params = optimize_hyperparameters(X_train, y_train_encoded, X_val, y_val_encoded)
     log_output(f"最佳超参数配置: {best_params}", log_file_path)
 
     # 使用最佳参数配置训练模型
-    start_time = time.time()
+
     log_output("\n=== 开始 LightGBM 模型训练和验证 ===", log_file_path)
     model = LGBMClassifier(**best_params, objective='multiclass', random_state=42, verbose=-1)
     model.fit(X_train, y_train_encoded)
