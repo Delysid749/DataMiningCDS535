@@ -34,11 +34,6 @@ y = data['happiness']
 # 1. 卡方检验
 chi2_scores, p_values = chi2(data[categorical_columns], y)
 chi2_results = pd.DataFrame({'Feature': categorical_columns, 'Chi2 Score': chi2_scores, 'p-value': p_values})
-chi2_results['Significance'] = pd.cut(
-    chi2_results['p-value'],
-    bins=[0, 0.01, 0.05, 1],
-    labels=['High', 'Medium', 'Low']
-)
 
 # 2. 互信息得分
 mutual_info_scores = mutual_info_classif(data[categorical_columns], y, discrete_features=True)
@@ -64,14 +59,28 @@ def adaptive_combined_score(row):
 chi2_results['Adaptive Combined Score'] = chi2_results.apply(adaptive_combined_score, axis=1)
 chi2_results.sort_values(by="Adaptive Combined Score", ascending=False, inplace=True)
 
+# 设置组合得分阈值划分高、中、低相关性特征
+high_threshold = 0.5
+medium_threshold = 0.05
+
+def categorize_significance(score):
+    if score >= high_threshold:
+        return 'High'
+    elif score >= medium_threshold:
+        return 'Medium'
+    else:
+        return 'Low'
+
+chi2_results['Significance'] = chi2_results['Adaptive Combined Score'].apply(categorize_significance)
+
 # 控制台输出
 print("=== 卡方检验和互信息得分结果 ===")
 print("根据组合得分排序的特征相关性：")
-print(chi2_results[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'p-value']])
+print(chi2_results[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'Significance']])
 
 # 记录组合得分结果到日志
 logging.info("=== 自适应加权组合得分结果 ===")
-logging.info("\n" + chi2_results[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'p-value']].to_string(index=False))
+logging.info("\n" + chi2_results[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'Significance']].to_string(index=False))
 
 # 可视化组合得分结果并添加标签
 plt.figure(figsize=(16, 10))
@@ -98,21 +107,20 @@ medium_significance_features = chi2_results[chi2_results['Significance'] == 'Med
 low_significance_features = chi2_results[chi2_results['Significance'] == 'Low']
 
 print("\n高相关性特征 (High):")
-print(high_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'p-value']])
+print(high_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'Significance']])
 
 print("\n中相关性特征 (Medium):")
-print(medium_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'p-value']])
+print(medium_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'Significance']])
 
 print("\n低相关性特征 (Low):")
-print(low_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'p-value']])
+print(low_significance_features[['Feature', 'Chi2 Score', 'Mutual Info Score', 'Adaptive Combined Score', 'Significance']])
 
-# 剔除高 p-value 的低相关性特征
-threshold = 0.05
-low_correlation_features = chi2_results[(chi2_results['Significance'] == 'Low') & (chi2_results['p-value'] > threshold)]['Feature'].tolist()
+# 剔除低相关性特征
+low_correlation_features = low_significance_features['Feature'].tolist()
 print("\n剔除后的低相关性特征数组:", low_correlation_features)
 
 # 记录低相关性特征数组到日志
-logging.info(f"剔除的低相关性特征 (p-value > {threshold}): {low_correlation_features}")
+logging.info(f"剔除的低相关性特征: {low_correlation_features}")
 logging.info("=== 特征选择过程完成 ===")
 
 # 仅保留前10个重要特征以提高可读性
@@ -133,4 +141,3 @@ plt.yticks([0.5, 1.5, 2.5], ["Chi2 Score", "Mutual Information Score", "Adaptive
 
 plt.tight_layout()  # 调整布局以避免标签重叠
 plt.show()
-

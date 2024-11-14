@@ -52,7 +52,7 @@ def objective(trial, X_train, y_train, X_val, y_val):
 # 超参数自动调优函数
 def optimize_hyperparameters(X_train, y_train, X_val, y_val):
     study = optuna.create_study(direction="maximize")
-    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=50)
+    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=10)
     return study.best_params
 
 
