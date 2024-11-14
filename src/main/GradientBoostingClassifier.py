@@ -138,7 +138,7 @@ def main(train_file, test_file):
     log_output(f"预测结果已导出到 {OUTPUT_FILE}", log_file_path)
 
     total_duration = time.time() - overall_start_time
-    log_output(f"整个流程总耗时: {total_duration:.2f} 秒", log_file_path)
+    log_output(f"整个流程总耗时: {total_duration:.2f} 秒", log_file_path,log_only_important=True)
 
 
 if __name__ == '__main__':
