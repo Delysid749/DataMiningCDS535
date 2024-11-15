@@ -133,7 +133,7 @@ def train_xgboost_model(X_train, y_train, X_val, y_val):
     y_val_pred = label_encoder.inverse_transform(y_val_pred_encoded)
     classification_report_output = classification_report(y_val, y_val_pred)
     log_output("验证集分类报告:\n" + classification_report_output, log_file_path, log_only_important=True)
-    log_output(f"模型训练耗时: {time.time() - start_time:.2f} 秒", log_file_path)
+    log_output(f"模型训练耗时: {time.time() - start_time:.2f} 秒", log_file_path,log_only_important=True)
 
     label_encoder_mapping = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
     return xgb_model, y_val_pred, label_encoder_mapping

@@ -101,7 +101,7 @@ def main(train_file, test_file):
     # 进行超参数优化
     log_output("\n=== 开始超参数自动调优 ===", log_file_path)
     best_params = optimize_hyperparameters(X_train, y_train_encoded, X_val, y_val_encoded)
-    log_output(f"最佳超参数配置: {best_params}", log_file_path)
+    log_output(f"最佳超参数配置: {best_params}", log_file_path, log_only_important=True)
 
     # 使用最佳参数配置训练模型
 

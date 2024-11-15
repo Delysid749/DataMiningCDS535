@@ -83,7 +83,7 @@ def train_logistic_regression_with_optuna(X_train, y_train, X_val, y_val):
 
     # 使用Optuna进行超参数优化
     study = optuna.create_study(direction="maximize")
-    study.optimize(lambda trial: objective(trial, X_train, y_train, X_val, y_val), n_trials=10)
+    study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=10)
 
     # 获取最佳超参数并重新训练模型
     best_params = study.best_params
@@ -113,7 +113,7 @@ def train_logistic_regression_with_optuna(X_train, y_train, X_val, y_val):
     # 验证集分类报告
     classification_report_output = classification_report(y_val, y_val_pred)
     log_output("验证集分类报告:\n" + classification_report_output, log_file_path, log_only_important=True)
-    log_output(f"模型训练耗时: {time.time() - start_time:.2f} 秒", log_file_path)
+    log_output(f"模型训练耗时: {time.time() - start_time:.2f} 秒", log_file_path, log_only_important=True)
     label_encoder_mapping = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
     return model, label_encoder_mapping
 
